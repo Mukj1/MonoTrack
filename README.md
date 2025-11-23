@@ -1,4 +1,4 @@
-### 中文使用说明
+### 使用说明
 
 在 [Gemini 3](https://ai.google.dev/gemini-api/docs/gemini-3?hl=zh-cn&thinking=high) 的帮助下，MonoTrack 得以诞生。它允许你上传多个 FIT 或 GPX 运动轨迹文件，并将它们同时可视化在同一张地图上，帮助你对比每一次运动。
 
@@ -14,7 +14,7 @@
 
 ---
 
-### User Guide (English)
+### User Guide
 
 With the help of [Gemini 3](https://ai.google.dev/gemini-api/docs/gemini-3?hl=zh-cn&thinking=high), MonoTrack was created. It allows you to upload multiple FIT or GPX activity files and visualize them on the same map, enabling you to compare each workout.
 
