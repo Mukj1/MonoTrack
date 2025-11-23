@@ -14,7 +14,6 @@ const App: React.FC = () => {
   const [sportFilter, setSportFilter] = useState<SportType | null>(null);
   const [dateFilter, setDateFilter] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState<{ current: number; total: number; filename: string } | null>(null);
   const [language, setLanguage] = useState<'en' | 'zh'>('zh');
 
   const t = TRANSLATIONS[language];
@@ -28,16 +27,12 @@ const App: React.FC = () => {
       // Clear the input value immediately so the same file can be selected again if needed
       target.value = '';
       
-      // Initialize progress
-      setLoadingProgress({ current: 0, total: files.length, filename: 'Initializing...' });
-
-      // Use setTimeout to yield to the event loop, allowing React to render the Loading UI 
-      // BEFORE the heavy parsing logic freezes the main thread.
+      // Use setTimeout with a slightly longer delay (300ms) to ensure React fully renders 
+      // the Loading Modal state to the DOM before the heavy JS parsing blocks the thread.
       setTimeout(async () => {
         try {
-          const parsedActivities = await parseFiles(files, (current, total, filename) => {
-              setLoadingProgress({ current, total, filename });
-          });
+          // We don't need to track detailed progress state anymore since we just show a spinner
+          const parsedActivities = await parseFiles(files);
           
           // Sort by date descending
           const sorted = parsedActivities.sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
@@ -47,9 +42,8 @@ const App: React.FC = () => {
           console.error("File parsing error:", error);
         } finally {
           setIsLoading(false);
-          setLoadingProgress(null);
         }
-      }, 100);
+      }, 300);
     }
   };
 
@@ -136,29 +130,23 @@ const App: React.FC = () => {
       
       <div className="flex-1 relative bg-neutral-100" onClick={handleMapAreaClick}>
         {isLoading && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-900/60 backdrop-blur-md transition-all duration-300">
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-6 transform scale-100 animate-in fade-in zoom-in-95 duration-200 min-w-[240px]">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-900/60 backdrop-blur-sm transition-all duration-300">
+            {/* 
+                Simplified Loading Card 
+                Removed detailed progress bars/text to prevent 'stuck' feeling.
+                Just a clean, aesthetic spinner.
+            */}
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-10 flex flex-col items-center gap-6 animate-in fade-in zoom-in-95 duration-300">
                 
-                {/* Dynamic Loading Spinner */}
                 <div className="relative">
-                    <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin" strokeWidth={1.5} />
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-8 h-8 bg-blue-500/10 rounded-full blur-xl animate-pulse" />
+                        <div className="w-12 h-12 bg-blue-500/10 rounded-full blur-xl animate-pulse" />
                     </div>
                 </div>
 
-                <div className="text-center space-y-2">
-                    <h3 className="text-white font-bold tracking-tight text-lg">{t.parsing}</h3>
-                    {loadingProgress && (
-                        <div className="flex flex-col items-center gap-1">
-                            <span className="text-neutral-400 font-mono text-xs max-w-[200px] truncate">
-                                {loadingProgress.filename}
-                            </span>
-                            <span className="text-neutral-600 font-mono text-[10px] uppercase tracking-widest">
-                                {loadingProgress.current} / {loadingProgress.total}
-                            </span>
-                        </div>
-                    )}
+                <div className="text-center">
+                    <h3 className="text-white font-medium tracking-wide text-lg animate-pulse">{t.parsing}</h3>
                 </div>
 
             </div>

@@ -212,8 +212,9 @@ export const parseFiles = async (
         onProgress(i + 1, total, file.name);
     }
 
-    // Yield to the event loop to allow UI updates (progress bar) to render
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Yield to the event loop to allow UI updates (spinner animation) to render.
+    // Increased to 30ms to ensure enough frame budget for the spinner.
+    await new Promise(resolve => setTimeout(resolve, 30));
 
     try {
       if (file.name.toLowerCase().endsWith('.gpx')) {
