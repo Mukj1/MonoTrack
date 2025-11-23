@@ -1,0 +1,5 @@
+{
+  "name": "MonoTrack",
+  "description": "A minimalist, high-performance trajectory visualizer for .gpx and .fit files. Features a monochromatic dark map, sport-specific neon color coding, and interactive track analysis.",
+  "requestFramePermissions": []
+}
