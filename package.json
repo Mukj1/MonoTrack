@@ -10,11 +10,11 @@
   },
   "dependencies": {
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
     "lucide-react": "^0.554.0",
-    "react-leaflet": "^5.0.0",
+    "react-dom": "^19.2.0",
     "leaflet": "^1.9.4",
-    "fit-file-parser": "1.9.5"
+    "react-leaflet": "^5.0.0",
+    "fit-file-parser": "^1.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

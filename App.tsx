@@ -22,7 +22,7 @@ const App: React.FC = () => {
     const target = e.target;
     if (target.files && target.files.length > 0) {
       setIsLoading(true);
-      const files = Array.from(target.files);
+      const files = Array.from(target.files) as File[];
       
       // Clear the input value immediately so the same file can be selected again if needed
       target.value = '';
