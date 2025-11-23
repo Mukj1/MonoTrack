@@ -38,6 +38,15 @@
         height: 100%;
         width: 100%;
       }
+      /* 
+       * CRITICAL FIX: Tailwind sets img { max-width: 100% } globally, which breaks Leaflet tiles.
+       * This forces Leaflet tiles to ignore that rule and render at full size.
+       */
+      .leaflet-tile {
+        max-width: none !important;
+        max-height: none !important;
+      }
+
       .leaflet-control-attribution {
         background: rgba(255,255,255,0.8) !important;
         color: #666 !important;
