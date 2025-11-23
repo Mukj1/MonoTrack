@@ -1,23 +1,4 @@
-﻿<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/1iTVKp1GtGPns1aMUco_-1BeGfyKlwN-u
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
-
+﻿
 在 Gemini 3 的帮助下，MonoTrack 得以诞生。它允许你上传多个 FIT 或 GPX 运动轨迹文件，并将它们同时可视化在同一张地图上，帮助你对比每一次运动。
 
 如需导出自己的全部运动轨迹，请参考 Strava 官方说明：https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export
