@@ -41,7 +41,7 @@ export const SPORT_DISPLAY_NAMES: Record<'en' | 'zh', Record<SportType, string>>
 
 export const TRANSLATIONS = {
   en: {
-    description: "Drag & drop or upload .gpx/.fit files to visualize your journeys.",
+    description: "Upload .gpx/.fit files to visualize your journeys.",
     totalDistance: "TOTAL DISTANCE",
     totalTime: "TOTAL TIME",
     importFiles: "Import Files",
@@ -63,7 +63,7 @@ export const TRANSLATIONS = {
     delete: "Delete",
   },
   zh: {
-    description: "拖放或上传 .gpx/.fit 文件以可视化您的旅程。",
+    description: "上传 .gpx/.fit 文件以可视化您的旅程。",
     totalDistance: "总距离",
     totalTime: "总时间",
     importFiles: "导入文件",
