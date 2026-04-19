@@ -306,7 +306,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </button>
                         )}
                      </div>
-                     <div className="grid grid-cols-2 gap-2">
+                     <div className="grid grid-cols-1 gap-2">
                         <div className="space-y-1">
                             <label className="text-[10px] font-medium text-stone-500">{t.start}</label>
                             <SimpleDatePicker

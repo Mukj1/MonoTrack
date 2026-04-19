@@ -21,6 +21,13 @@ const DetailStat: React.FC<{ label: string; value: string }> = ({ label, value }
   </div>
 );
 
+const SummaryStat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="min-w-0 rounded-md border border-stone-200/80 bg-white/55 px-3 py-2.5">
+    <div className="text-[10px] uppercase tracking-wider text-stone-500">{label}</div>
+    <div className="mt-1 break-words font-mono text-[15px] leading-tight text-stone-950">{value}</div>
+  </div>
+);
+
 const App: React.FC = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -313,12 +320,12 @@ const App: React.FC = () => {
         />
 
         {selectedTracksSummary && (
-          <div className="pointer-events-none absolute left-4 right-4 top-4 z-[400] rounded-lg border border-white/70 bg-white/88 p-4 shadow-[0_18px_50px_rgba(41,37,36,0.18)] backdrop-blur md:left-auto md:w-[368px]">
+          <div className="pointer-events-none absolute left-4 right-4 top-4 z-[400] rounded-lg border border-white/70 bg-white/88 p-4 shadow-[0_18px_50px_rgba(41,37,36,0.18)] backdrop-blur md:left-auto md:w-[440px] md:max-w-[calc(100%-2rem)]">
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">{t.selectedTracks}</div>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <DetailStat label={t.selectedDistance} value={formatDistance(selectedTracksSummary.distance)} />
-              <DetailStat label={t.selectedMovingTime} value={formatDuration(selectedTracksSummary.movingDuration)} />
-              <DetailStat label={t.selectedGain} value={formatElevation(selectedTracksSummary.elevationGain)} />
+            <div className="mt-4 grid grid-cols-1 gap-2 min-[520px]:grid-cols-3">
+              <SummaryStat label={t.selectedDistance} value={formatDistance(selectedTracksSummary.distance)} />
+              <SummaryStat label={t.selectedMovingTime} value={formatDuration(selectedTracksSummary.movingDuration)} />
+              <SummaryStat label={t.selectedGain} value={formatElevation(selectedTracksSummary.elevationGain)} />
             </div>
           </div>
         )}

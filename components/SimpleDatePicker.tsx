@@ -23,6 +23,9 @@ const LABELS = {
   zh: { clear: '清除', today: '今天' }
 };
 
+const THIS_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: THIS_YEAR - 1969 + 6 }, (_, index) => 1970 + index);
+
 export const SimpleDatePicker: React.FC<SimpleDatePickerProps> = ({ value, onChange, placeholder, language }) => {
   const [isOpen, setIsOpen] = useState(false);
   // viewDate tracks the month currently being viewed in the calendar
@@ -66,6 +69,14 @@ export const SimpleDatePicker: React.FC<SimpleDatePickerProps> = ({ value, onCha
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
   };
 
+  const handleYearChange = (nextYear: string) => {
+    setViewDate(new Date(Number(nextYear), viewDate.getMonth(), 1));
+  };
+
+  const handleMonthChange = (nextMonth: string) => {
+    setViewDate(new Date(viewDate.getFullYear(), Number(nextMonth), 1));
+  };
+
   const handleDateClick = (day: number) => {
     const y = viewDate.getFullYear();
     const m = viewDate.getMonth() + 1;
@@ -105,42 +116,62 @@ export const SimpleDatePicker: React.FC<SimpleDatePickerProps> = ({ value, onCha
     <div className="relative w-full" ref={containerRef}>
       {/* Input Trigger */}
       <div 
-        className="relative flex items-center w-full bg-neutral-800 border border-neutral-700 rounded cursor-pointer hover:border-neutral-500 transition-colors group"
+        className="relative flex w-full cursor-pointer items-center rounded border border-stone-700 bg-stone-900 transition-colors hover:border-stone-500 group"
         onClick={() => setIsOpen(!isOpen)}
       >
         <input 
             type="text" 
             readOnly 
-            className="w-full bg-transparent text-xs text-white px-2 py-1.5 focus:outline-none cursor-pointer placeholder:text-neutral-600"
+            className="w-full cursor-pointer bg-transparent px-2 py-1.5 text-xs text-white placeholder:text-stone-600 focus:outline-none"
             placeholder={placeholder}
             value={displayValue}
         />
-        <div className="pr-2 text-neutral-500 group-hover:text-neutral-300">
+        <div className="pr-2 text-stone-500 group-hover:text-stone-300">
             <CalendarIcon className="w-3.5 h-3.5" />
         </div>
       </div>
 
       {/* Calendar Popup */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-64 bg-neutral-800 border border-neutral-600 rounded-lg shadow-2xl z-50 p-3 select-none">
+        <div className="mt-2 w-full min-w-0 select-none rounded-lg border border-stone-700 bg-stone-900 p-3 shadow-2xl">
           
           {/* Header */}
-          <div className="flex items-center justify-between mb-3 px-1">
+          <div className="mb-3 grid grid-cols-[auto_1fr_auto] items-center gap-2 px-1">
             <button 
                 onClick={(e) => { e.stopPropagation(); handlePrevMonth(); }} 
-                className="p-1 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white transition-colors"
+                className="rounded p-1 text-stone-400 transition-colors hover:bg-stone-800 hover:text-white"
             >
                 <ChevronLeft className="w-4 h-4" />
             </button>
-            <div className="font-bold text-white text-sm">
-                {language === 'zh' 
-                    ? `${year}年 ${MONTHS.zh[month]}`
-                    : `${MONTHS.en[month]} ${year}`
-                }
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+              <select
+                value={year}
+                onChange={(event) => handleYearChange(event.target.value)}
+                onClick={(event) => event.stopPropagation()}
+                className="min-w-0 rounded border border-stone-700 bg-stone-950 px-2 py-1 text-xs font-semibold text-stone-100 outline-none transition focus:border-stone-500"
+              >
+                {YEAR_OPTIONS.map(option => (
+                  <option key={option} value={option}>
+                    {language === 'zh' ? `${option}年` : option}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={month}
+                onChange={(event) => handleMonthChange(event.target.value)}
+                onClick={(event) => event.stopPropagation()}
+                className="min-w-0 rounded border border-stone-700 bg-stone-950 px-2 py-1 text-xs font-semibold text-stone-100 outline-none transition focus:border-stone-500"
+              >
+                {MONTHS[language].map((label, index) => (
+                  <option key={label} value={index}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </div>
             <button 
                 onClick={(e) => { e.stopPropagation(); handleNextMonth(); }} 
-                className="p-1 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white transition-colors"
+                className="rounded p-1 text-stone-400 transition-colors hover:bg-stone-800 hover:text-white"
             >
                 <ChevronRight className="w-4 h-4" />
             </button>
@@ -149,7 +180,7 @@ export const SimpleDatePicker: React.FC<SimpleDatePickerProps> = ({ value, onCha
           {/* Weekday Headers */}
           <div className="grid grid-cols-7 mb-2">
             {WEEKDAYS[language].map(d => (
-                <div key={d} className="text-center text-[10px] text-neutral-500 font-medium py-1">
+                <div key={d} className="py-1 text-center text-[10px] font-medium text-stone-500">
                     {d}
                 </div>
             ))}
@@ -176,12 +207,12 @@ export const SimpleDatePicker: React.FC<SimpleDatePickerProps> = ({ value, onCha
                         key={d}
                         onClick={(e) => { e.stopPropagation(); handleDateClick(d); }}
                         className={`
-                            h-7 w-7 rounded-full flex items-center justify-center text-xs transition-colors
+                            flex aspect-square min-h-7 w-full items-center justify-center rounded-full text-xs transition-colors
                             ${isSelected 
-                                ? 'bg-blue-600 text-white font-bold' 
+                                ? 'bg-[#C66A3D] text-white font-bold'
                                 : isToday 
-                                    ? 'bg-neutral-700 text-blue-400 font-bold hover:bg-neutral-600'
-                                    : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                                    ? 'bg-stone-800 text-[#D98A62] font-bold hover:bg-stone-700'
+                                    : 'text-stone-300 hover:bg-stone-800 hover:text-white'
                             }
                         `}
                     >
@@ -192,16 +223,16 @@ export const SimpleDatePicker: React.FC<SimpleDatePickerProps> = ({ value, onCha
           </div>
 
           {/* Footer Actions */}
-          <div className="flex justify-between items-center mt-3 pt-3 border-t border-neutral-700 px-1">
+          <div className="mt-3 flex items-center justify-between border-t border-stone-700 px-1 pt-3">
             <button 
                 onClick={(e) => { e.stopPropagation(); handleClear(); }} 
-                className="text-xs text-neutral-400 hover:text-white transition-colors"
+                className="text-xs text-stone-400 transition-colors hover:text-white"
             >
                 {LABELS[language].clear}
             </button>
             <button 
                 onClick={(e) => { e.stopPropagation(); handleToday(); }} 
-                className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                className="text-xs font-medium text-[#D98A62] transition-colors hover:text-[#F0A57C]"
             >
                 {LABELS[language].today}
             </button>
