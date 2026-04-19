@@ -218,6 +218,7 @@ const ActivityMap: React.FC<ActivityMapProps> = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onActivityClickRef = useRef(onActivityClick);
   const onActivityHoverRef = useRef(onActivityHover);
+  const previousSelectedIdRef = useRef<string | null>(null);
   const tooltipActivityRef = useRef<TooltipInfo | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -333,12 +334,13 @@ const ActivityMap: React.FC<ActivityMapProps> = ({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady || activities.length === 0) return;
+    if (selectedId || (previousSelectedIdRef.current && !selectedId)) return;
 
     const bounds = buildBounds(activities);
     if (bounds) {
       map.fitBounds(bounds, { padding: 70, maxZoom: 13, duration: 900 });
     }
-  }, [activities, isMapReady]);
+  }, [activities, selectedId, isMapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -352,6 +354,10 @@ const ActivityMap: React.FC<ActivityMapProps> = ({
       map.fitBounds(bounds, { padding: 90, maxZoom: 15, duration: 900 });
     }
   }, [activities, selectedId, isMapReady]);
+
+  useEffect(() => {
+    previousSelectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   return (
     <div className="relative h-full w-full">
