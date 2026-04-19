@@ -8,6 +8,8 @@ import FitParser from 'fit-file-parser';
 const SEMICIRCLES_TO_DEGREES = 180 / 2147483648;
 const SUPPORTED_ACTIVITY_EXTENSIONS = ['.gpx', '.fit', '.tcx'];
 const ELEVATION_NOISE_FLOOR_METERS = 1;
+const MOVING_SPEED_THRESHOLD_KMH = 0.5;
+const MOVING_DISTANCE_THRESHOLD_METERS = 2;
 
 export interface ParseProgress {
   current: number;
@@ -154,8 +156,12 @@ const parseFit = async (buffer: ArrayBuffer, filename: string): Promise<Activity
       }
 
       let sportType = SportType.Other;
-      if (data.sessions && data.sessions.length > 0) {
-        const session = data.sessions[0];
+      const session = data.sessions && data.sessions.length > 0 ? data.sessions[0] : undefined;
+      const nativeElevationGain = Number(
+        session?.total_ascent ?? session?.enhanced_total_ascent ?? session?.totalAscent ?? session?.ascent
+      );
+
+      if (session) {
         if (session.sport) sportType = detectSportType(String(session.sport));
         if (sportType === SportType.Other && session.sub_sport) {
           sportType = detectSportType(String(session.sub_sport));
@@ -195,7 +201,11 @@ const parseFit = async (buffer: ArrayBuffer, filename: string): Promise<Activity
       }
 
       try {
-        resolve(processPointsToActivity(points, filename, sportType));
+        const activity = processPointsToActivity(points, filename, sportType);
+        if (Number.isFinite(nativeElevationGain) && nativeElevationGain > 0) {
+          activity.stats.elevationGain = Math.max(activity.stats.elevationGain || 0, nativeElevationGain);
+        }
+        resolve(activity);
       } catch (e) {
         reject(e);
       }
@@ -231,11 +241,14 @@ const processPointsToActivity = (points: GeoPoint[], name: string, type: SportTy
   const startTime = validPoints[0].time || new Date();
   const endTime = validPoints[validPoints.length - 1].time || new Date();
   const duration = (endTime.getTime() - startTime.getTime()) / 1000;
+  const elapsedDuration = duration > 0 ? duration : 0;
+  const movingStats = calculateMovingStats(validPoints, elapsedDuration, totalDist);
 
   const stats: ActivityStats = {
     distance: totalDist,
-    duration: duration > 0 ? duration : 0,
-    avgSpeed: duration > 0 ? (totalDist / 1000) / (duration / 3600) : 0,
+    duration: elapsedDuration,
+    movingDuration: movingStats.duration,
+    avgSpeed: movingStats.duration > 0 ? (movingStats.distance / 1000) / (movingStats.duration / 3600) : 0,
     maxEle: maxEle === -Infinity ? 0 : maxEle,
     minEle: minEle === Infinity ? 0 : minEle,
     elevationGain: calculateElevationGain(validPoints),
@@ -339,6 +352,31 @@ const calculateElevationGain = (points: GeoPoint[]) => {
   }
 
   return gain + pendingGain;
+};
+
+const calculateMovingStats = (points: GeoPoint[], fallbackDuration: number, fallbackDistance: number) => {
+  let movingSeconds = 0;
+  let movingDistance = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const previous = points[i - 1];
+    const point = points[i];
+    if (!previous.time || !point.time) continue;
+
+    const seconds = (point.time.getTime() - previous.time.getTime()) / 1000;
+    if (seconds <= 0) continue;
+
+    const distance = calculateDistance(previous, point);
+    const speedKmh = (distance / 1000) / (seconds / 3600);
+    if (distance >= MOVING_DISTANCE_THRESHOLD_METERS && speedKmh >= MOVING_SPEED_THRESHOLD_KMH) {
+      movingSeconds += seconds;
+      movingDistance += distance;
+    }
+  }
+
+  return movingSeconds > 0
+    ? { duration: movingSeconds, distance: movingDistance }
+    : { duration: fallbackDuration, distance: fallbackDistance };
 };
 
 export const parseFiles = async (

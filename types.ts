@@ -67,6 +67,7 @@ export interface GeoPoint {
 export interface ActivityStats {
   distance: number; // meters
   duration: number; // seconds
+  movingDuration?: number; // seconds
   avgSpeed: number; // km/h
   maxEle: number; // meters
   minEle: number; // meters
