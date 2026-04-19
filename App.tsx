@@ -227,6 +227,19 @@ const App: React.FC = () => {
     return filteredActivities;
   }, [filteredActivities, isMultiSelectMode, selectedId, selectedTrackIds]);
 
+  const selectedTracksSummary = useMemo(() => {
+    if (!isMultiSelectMode || visibleActivities.length === 0) return null;
+
+    return visibleActivities.reduce(
+      (summary, activity) => ({
+        distance: summary.distance + activity.stats.distance,
+        movingDuration: summary.movingDuration + (activity.stats.movingDuration ?? activity.stats.duration),
+        elevationGain: summary.elevationGain + (activity.stats.elevationGain || 0),
+      }),
+      { distance: 0, movingDuration: 0, elevationGain: 0 }
+    );
+  }, [isMultiSelectMode, visibleActivities]);
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-stone-100 md:flex-row">
       <Sidebar 
@@ -299,7 +312,18 @@ const App: React.FC = () => {
           language={language}
         />
 
-        {selectedActivity && (
+        {selectedTracksSummary && (
+          <div className="pointer-events-none absolute left-4 right-4 top-4 z-[400] rounded-lg border border-white/70 bg-white/88 p-4 shadow-[0_18px_50px_rgba(41,37,36,0.18)] backdrop-blur md:left-auto md:w-[368px]">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">{t.selectedTracks}</div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <DetailStat label={t.selectedDistance} value={formatDistance(selectedTracksSummary.distance)} />
+              <DetailStat label={t.selectedMovingTime} value={formatDuration(selectedTracksSummary.movingDuration)} />
+              <DetailStat label={t.selectedGain} value={formatElevation(selectedTracksSummary.elevationGain)} />
+            </div>
+          </div>
+        )}
+
+        {!selectedTracksSummary && selectedActivity && (
           <div className="pointer-events-none absolute left-4 right-4 top-4 z-[400] rounded-lg border border-white/70 bg-white/88 p-4 shadow-[0_18px_50px_rgba(41,37,36,0.18)] backdrop-blur md:left-auto md:w-[368px]">
             <div className="flex items-start gap-3">
               <div
