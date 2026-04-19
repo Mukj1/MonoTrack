@@ -31,6 +31,15 @@ export function formatDistance(meters: number): string {
   return `${km.toFixed(2)} km`;
 }
 
+export function formatSpeed(kmh: number): string {
+  return `${kmh.toFixed(1)} km/h`;
+}
+
+export function formatElevation(meters: number): string {
+  if (!Number.isFinite(meters)) return '0 m';
+  return `${Math.round(meters)} m`;
+}
+
 export function formatDate(date: Date, locale: 'en' | 'zh' = 'zh'): string {
   const loc = locale === 'zh' ? 'zh-CN' : 'en-US';
   return new Intl.DateTimeFormat(loc, {

@@ -1,177 +1,230 @@
 import { Activity, GeoPoint, SportType, ActivityStats } from '../types';
 import { calculateDistance } from '../utils/geoUtils';
-import { SPORT_COLORS, STRING_TO_SPORT } from '../constants';
+import { SPORT_COLORS, STRING_TO_SPORT, normalizeSportKey } from '../constants';
+import { decompressSync, strFromU8, unzipSync } from 'fflate';
 // @ts-ignore
 import FitParser from 'fit-file-parser';
 
 const SEMICIRCLES_TO_DEGREES = 180 / 2147483648;
+const SUPPORTED_ACTIVITY_EXTENSIONS = ['.gpx', '.fit', '.tcx'];
+const ELEVATION_NOISE_FLOOR_METERS = 1;
 
-// Helper to map string type to Enum
+export interface ParseProgress {
+  current: number;
+  total: number;
+  filename: string;
+  imported: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface ParseSummary {
+  imported: number;
+  skipped: number;
+  failed: number;
+}
+
+interface ActivityFile {
+  name: string;
+  bytes: Uint8Array;
+}
+
+const sportKeysByLength = Object.keys(STRING_TO_SPORT).sort((a, b) => b.length - a.length);
+
 const detectSportType = (typeStr: string | undefined | null): SportType => {
   if (!typeStr) return SportType.Other;
-  const lower = String(typeStr).toLowerCase();
-  for (const [key, value] of Object.entries(STRING_TO_SPORT)) {
-    if (lower.includes(key)) return value;
-  }
-  return SportType.Other;
+  const normalized = normalizeSportKey(String(typeStr));
+  if (!normalized) return SportType.Other;
+
+  const exact = STRING_TO_SPORT[normalized];
+  if (exact) return exact;
+
+  const fuzzyKey = sportKeysByLength.find(key => key.length > 2 && normalized.includes(key));
+  return fuzzyKey ? STRING_TO_SPORT[fuzzyKey] : SportType.Other;
 };
 
-// Generate ID
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-// Parse GPX content (XML string)
-const parseGpx = (content: string, filename: string): Activity => {
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(content, "text/xml");
-  
-  // Check for parser errors
-  const parseError = xmlDoc.getElementsByTagName("parsererror");
-  if (parseError.length > 0) {
-    throw new Error("XML Parsing Error");
-  }
+const textFromBytes = (bytes: Uint8Array) => strFromU8(bytes);
 
-  // Get track
+const arrayBufferFromBytes = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+const getFirstText = (element: Element | Document, tagNames: string[]): string | undefined => {
+  for (const tagName of tagNames) {
+    const tags = element.getElementsByTagName(tagName);
+    if (tags.length > 0) {
+      const value = tags[0].textContent?.trim();
+      if (value) return value;
+    }
+  }
+  return undefined;
+};
+
+const parseXml = (content: string): Document => {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(content, 'text/xml');
+  const parseError = xmlDoc.getElementsByTagName('parsererror');
+  if (parseError.length > 0) {
+    throw new Error('XML Parsing Error');
+  }
+  return xmlDoc;
+};
+
+const parseGpx = (content: string, filename: string): Activity => {
+  const xmlDoc = parseXml(content);
   const trkList = xmlDoc.getElementsByTagName('trk');
-  if (trkList.length === 0) throw new Error("No track found in GPX");
+  if (trkList.length === 0) throw new Error('No track found in GPX');
   const trk = trkList[0];
 
-  const nameTags = trk.getElementsByTagName('name');
-  const name = nameTags.length > 0 ? nameTags[0].textContent || filename : filename;
-  
-  const typeTags = trk.getElementsByTagName('type');
-  const typeStr = typeTags.length > 0 ? typeTags[0].textContent : undefined;
-  
-  // Get all trackpoints across all segments
+  const name = getFirstText(trk, ['name']) || filename;
+  const typeStr = getFirstText(trk, ['type']) || filename;
   const trkpts = xmlDoc.getElementsByTagName('trkpt');
   const points: GeoPoint[] = [];
-  
+
   for (let i = 0; i < trkpts.length; i++) {
     const pt = trkpts[i];
     const latStr = pt.getAttribute('lat');
     const lonStr = pt.getAttribute('lon');
-    
+
     if (latStr && lonStr) {
-        const lat = parseFloat(latStr);
-        const lon = parseFloat(lonStr);
-        
-        const eleTags = pt.getElementsByTagName('ele');
-        const ele = eleTags.length > 0 ? parseFloat(eleTags[0].textContent || '0') : 0;
-        
-        const timeTags = pt.getElementsByTagName('time');
-        const timeStr = timeTags.length > 0 ? timeTags[0].textContent : null;
-        
-        points.push({
-          lat,
-          lon,
-          ele,
-          time: timeStr ? new Date(timeStr) : undefined
-        });
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+      const eleStr = getFirstText(pt, ['ele']);
+      const timeStr = getFirstText(pt, ['time']);
+
+      points.push({
+        lat,
+        lon,
+        ele: eleStr ? parseFloat(eleStr) : 0,
+        time: timeStr ? new Date(timeStr) : undefined,
+      });
     }
   }
 
   return processPointsToActivity(points, name, detectSportType(typeStr));
 };
 
-// Parse FIT content using fit-file-parser
-const parseFit = async (buffer: ArrayBuffer, filename: string): Promise<Activity> => {
-    return new Promise((resolve, reject) => {
-        const parser = new FitParser({
-            force: true,
-            speedUnit: 'km/h',
-            lengthUnit: 'm',
-            temperatureUnit: 'celsius',
-            elapsedRecordField: true,
-            mode: 'list',
-        });
+const parseTcx = (content: string, filename: string): Activity => {
+  const xmlDoc = parseXml(content);
+  const activities = xmlDoc.getElementsByTagName('Activity');
+  if (activities.length === 0) throw new Error('No activity found in TCX');
 
-        parser.parse(buffer, (error: any, data: any) => {
-            if (error) {
-                reject(error);
-                return;
-            }
+  const activity = activities[0];
+  const sportAttr = activity.getAttribute('Sport') || filename;
+  const name = getFirstText(activity, ['Id']) || filename;
+  const trackpoints = activity.getElementsByTagName('Trackpoint');
+  const points: GeoPoint[] = [];
 
-            let sportType = SportType.Other;
-            if (data.sessions && data.sessions.length > 0) {
-                const session = data.sessions[0];
-                if (session.sport) sportType = detectSportType(String(session.sport));
-                if (sportType === SportType.Other && session.sub_sport) {
-                     sportType = detectSportType(String(session.sub_sport));
-                }
-            }
+  for (let i = 0; i < trackpoints.length; i++) {
+    const trackpoint = trackpoints[i];
+    const latStr = getFirstText(trackpoint, ['LatitudeDegrees']);
+    const lonStr = getFirstText(trackpoint, ['LongitudeDegrees']);
+    if (!latStr || !lonStr) continue;
 
-            const points: GeoPoint[] = [];
-            
-            if (data.records && Array.isArray(data.records)) {
-                data.records.forEach((record: any) => {
-                    // Try multiple field names for coordinates
-                    let lat = record.position_lat;
-                    let lon = record.position_long;
-                    
-                    // Fallbacks if explicit position fields aren't found
-                    if (lat == null) lat = record.lat;
-                    if (lon == null) lon = record.long;
+    const eleStr = getFirstText(trackpoint, ['AltitudeMeters']);
+    const timeStr = getFirstText(trackpoint, ['Time']);
 
-                    if (lat != null && lon != null) {
-                        // Convert semicircles to degrees if value is large (standard FIT format)
-                        if (Math.abs(lat) > 180) {
-                            lat = lat * SEMICIRCLES_TO_DEGREES;
-                        }
-                        if (Math.abs(lon) > 180) {
-                            lon = lon * SEMICIRCLES_TO_DEGREES;
-                        }
-
-                        // Basic validity check for Earth coordinates
-                        if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-                            points.push({
-                                lat: lat,
-                                lon: lon,
-                                ele: record.altitude || record.ele || 0,
-                                time: record.timestamp ? new Date(record.timestamp) : undefined
-                            });
-                        }
-                    }
-                });
-            }
-
-            if (points.length === 0) {
-                reject(new Error("No GPS track points found in FIT file."));
-                return;
-            }
-
-            try {
-                const activity = processPointsToActivity(points, filename, sportType);
-                resolve(activity);
-            } catch (e) {
-                reject(e);
-            }
-        });
+    points.push({
+      lat: parseFloat(latStr),
+      lon: parseFloat(lonStr),
+      ele: eleStr ? parseFloat(eleStr) : 0,
+      time: timeStr ? new Date(timeStr) : undefined,
     });
+  }
+
+  return processPointsToActivity(points, name, detectSportType(sportAttr));
+};
+
+const parseFit = async (buffer: ArrayBuffer, filename: string): Promise<Activity> => {
+  return new Promise((resolve, reject) => {
+    const parser = new FitParser({
+      force: true,
+      speedUnit: 'km/h',
+      lengthUnit: 'm',
+      temperatureUnit: 'celsius',
+      elapsedRecordField: true,
+      mode: 'list',
+    });
+
+    parser.parse(buffer, (error: any, data: any) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      let sportType = SportType.Other;
+      if (data.sessions && data.sessions.length > 0) {
+        const session = data.sessions[0];
+        if (session.sport) sportType = detectSportType(String(session.sport));
+        if (sportType === SportType.Other && session.sub_sport) {
+          sportType = detectSportType(String(session.sub_sport));
+        }
+      }
+      if (sportType === SportType.Other) sportType = detectSportType(filename);
+
+      const points: GeoPoint[] = [];
+
+      if (data.records && Array.isArray(data.records)) {
+        data.records.forEach((record: any) => {
+          let lat = record.position_lat;
+          let lon = record.position_long;
+
+          if (lat == null) lat = record.lat;
+          if (lon == null) lon = record.long;
+
+          if (lat != null && lon != null) {
+            if (Math.abs(lat) > 180) lat = lat * SEMICIRCLES_TO_DEGREES;
+            if (Math.abs(lon) > 180) lon = lon * SEMICIRCLES_TO_DEGREES;
+
+            if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+              points.push({
+                lat,
+                lon,
+                ele: record.enhanced_altitude ?? record.altitude ?? record.ele ?? 0,
+                time: record.timestamp ? new Date(record.timestamp) : undefined,
+              });
+            }
+          }
+        });
+      }
+
+      if (points.length === 0) {
+        reject(new Error('No GPS track points found in FIT file.'));
+        return;
+      }
+
+      try {
+        resolve(processPointsToActivity(points, filename, sportType));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
 };
 
 const processPointsToActivity = (points: GeoPoint[], name: string, type: SportType): Activity => {
   if (points.length === 0) {
-    throw new Error("No track points found");
+    throw new Error('No track points found');
   }
 
   let totalDist = 0;
   let maxEle = -Infinity;
   let minEle = Infinity;
 
-  // Filter out points with invalid lat/lon just in case
   const validPoints = points.filter(p => !isNaN(p.lat) && !isNaN(p.lon));
-  if (validPoints.length === 0) throw new Error("No valid track points");
+  if (validPoints.length === 0) throw new Error('No valid track points');
 
   for (let i = 0; i < validPoints.length; i++) {
-    const p = validPoints[i];
-    if (p.ele !== undefined && !isNaN(p.ele)) {
-      maxEle = Math.max(maxEle, p.ele);
-      minEle = Math.min(minEle, p.ele);
+    const point = validPoints[i];
+    if (point.ele !== undefined && !isNaN(point.ele)) {
+      maxEle = Math.max(maxEle, point.ele);
+      minEle = Math.min(minEle, point.ele);
     }
     if (i > 0) {
-      const d = calculateDistance(validPoints[i - 1], p);
-      if (!isNaN(d)) {
-          totalDist += d;
-      }
+      const previous = validPoints[i - 1];
+      const distance = calculateDistance(previous, point);
+      if (!isNaN(distance)) totalDist += distance;
     }
   }
 
@@ -185,6 +238,7 @@ const processPointsToActivity = (points: GeoPoint[], name: string, type: SportTy
     avgSpeed: duration > 0 ? (totalDist / 1000) / (duration / 3600) : 0,
     maxEle: maxEle === -Infinity ? 0 : maxEle,
     minEle: minEle === Infinity ? 0 : minEle,
+    elevationGain: calculateElevationGain(validPoints),
   };
 
   return {
@@ -198,37 +252,138 @@ const processPointsToActivity = (points: GeoPoint[], name: string, type: SportTy
   };
 };
 
+const isSupportedActivityFile = (filename: string) => {
+  const lower = filename.toLowerCase();
+  return SUPPORTED_ACTIVITY_EXTENSIONS.some(ext => lower.endsWith(ext));
+};
+
+const expandFile = async (file: File): Promise<{ entries: ActivityFile[]; skipped: number }> => {
+  const filename = file.name;
+  const lower = filename.toLowerCase();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+
+  if (lower.endsWith('.zip')) {
+    const entries = unzipSync(bytes);
+    const activityEntries: ActivityFile[] = [];
+    let skipped = 0;
+
+    Object.entries(entries).forEach(([entryName, entryBytes]) => {
+      if (entryName.endsWith('/')) return;
+      const lowerEntry = entryName.toLowerCase();
+
+      if (lowerEntry.endsWith('.gz')) {
+        const innerName = entryName.replace(/\.gz$/i, '');
+        if (isSupportedActivityFile(innerName)) {
+          activityEntries.push({ name: innerName, bytes: decompressSync(entryBytes) });
+        } else {
+          skipped += 1;
+        }
+        return;
+      }
+
+      if (isSupportedActivityFile(entryName)) {
+        activityEntries.push({ name: entryName, bytes: entryBytes });
+      } else {
+        skipped += 1;
+      }
+    });
+
+    return { entries: activityEntries, skipped };
+  }
+
+  if (lower.endsWith('.gz')) {
+    const innerName = filename.replace(/\.gz$/i, '');
+    if (isSupportedActivityFile(innerName)) {
+      return { entries: [{ name: innerName, bytes: decompressSync(bytes) }], skipped: 0 };
+    }
+    return { entries: [], skipped: 1 };
+  }
+
+  if (isSupportedActivityFile(filename)) {
+    return { entries: [{ name: filename, bytes }], skipped: 0 };
+  }
+
+  return { entries: [], skipped: 1 };
+};
+
+const parseActivityFile = async ({ name, bytes }: ActivityFile): Promise<Activity> => {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.gpx')) return parseGpx(textFromBytes(bytes), name);
+  if (lower.endsWith('.tcx')) return parseTcx(textFromBytes(bytes), name);
+  if (lower.endsWith('.fit')) return parseFit(arrayBufferFromBytes(bytes), name);
+  throw new Error(`Unsupported file type: ${name}`);
+};
+
+const calculateElevationGain = (points: GeoPoint[]) => {
+  const elevations = points
+    .map(point => point.ele)
+    .filter((ele): ele is number => ele !== undefined && Number.isFinite(ele));
+
+  if (elevations.length < 2) return 0;
+
+  let gain = 0;
+  let baseline = elevations[0];
+  let pendingGain = 0;
+
+  for (let i = 1; i < elevations.length; i++) {
+    const delta = elevations[i] - baseline;
+
+    if (delta > 0) {
+      pendingGain += delta;
+      baseline = elevations[i];
+    } else if (Math.abs(delta) >= ELEVATION_NOISE_FLOOR_METERS) {
+      gain += pendingGain;
+      pendingGain = 0;
+      baseline = elevations[i];
+    }
+  }
+
+  return gain + pendingGain;
+};
+
 export const parseFiles = async (
-  files: File[], 
-  onProgress?: (current: number, total: number, filename: string) => void
+  files: File[],
+  onProgress?: (progress: ParseProgress) => void,
+  onComplete?: (summary: ParseSummary) => void
 ): Promise<Activity[]> => {
   const results: Activity[] = [];
-  const total = files.length;
+  const summary: ParseSummary = { imported: 0, skipped: 0, failed: 0 };
+  const expanded: ActivityFile[] = [];
+
+  for (const file of files) {
+    try {
+      const { entries, skipped } = await expandFile(file);
+      expanded.push(...entries);
+      summary.skipped += skipped;
+    } catch (error) {
+      summary.failed += 1;
+      console.error(`Failed to expand ${file.name}`, error);
+    }
+  }
+
+  const total = expanded.length;
 
   for (let i = 0; i < total; i++) {
-    const file = files[i];
+    const entry = expanded[i];
 
-    if (onProgress) {
-        onProgress(i + 1, total, file.name);
-    }
+    onProgress?.({
+      current: i + 1,
+      total,
+      filename: entry.name,
+      ...summary,
+    });
 
-    // Yield to the event loop to allow UI updates (spinner animation) to render.
-    // Increased to 30ms to ensure enough frame budget for the spinner.
     await new Promise(resolve => setTimeout(resolve, 30));
 
     try {
-      if (file.name.toLowerCase().endsWith('.gpx')) {
-        const text = await file.text();
-        results.push(parseGpx(text, file.name));
-      } else if (file.name.toLowerCase().endsWith('.fit')) {
-        const buffer = await file.arrayBuffer();
-        const activity = await parseFit(buffer, file.name);
-        results.push(activity);
-      }
-    } catch (err) {
-      console.error(`Failed to parse ${file.name}`, err);
-      // We don't throw here to allow partial success of other files
+      results.push(await parseActivityFile(entry));
+      summary.imported += 1;
+    } catch (error) {
+      summary.failed += 1;
+      console.error(`Failed to parse ${entry.name}`, error);
     }
   }
+
+  onComplete?.(summary);
   return results;
 };
