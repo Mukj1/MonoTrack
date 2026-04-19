@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const dataDir = path.join(root, 'data');
 const dbFile = path.join(dataDir, 'monotrack.sqlite');
 const port = Number(process.env.PORT || 3000);
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
 const activityDb = createActivityDb({ dataDir, dbFile });
 const storedActivities = activityDb.list();
 

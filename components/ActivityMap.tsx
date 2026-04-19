@@ -250,8 +250,6 @@ const ActivityMap: React.FC<ActivityMapProps> = ({
       setIsMapReady(true);
     });
 
-    map.on('dblclick', () => onActivityClickRef.current(null));
-
     return () => {
       map.remove();
       mapRef.current = null;
@@ -275,6 +273,11 @@ const ActivityMap: React.FC<ActivityMapProps> = ({
       const feature = event.features?.[0];
       const id = feature?.properties?.id;
       if (id) onActivityClickRef.current(String(id));
+    };
+
+    const handleMapClick = (event: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(event.point, { layers: [LINE_LAYER_ID] });
+      if (features.length === 0) onActivityClickRef.current(null);
     };
 
     const handleMouseMove = (event: maplibregl.MapLayerMouseEvent) => {
@@ -308,11 +311,13 @@ const ActivityMap: React.FC<ActivityMapProps> = ({
       onActivityHoverRef.current(null);
     };
 
+    map.on('click', handleMapClick);
     map.on('click', LINE_LAYER_ID, handleClick);
     map.on('mousemove', LINE_LAYER_ID, handleMouseMove);
     map.on('mouseleave', LINE_LAYER_ID, handleMouseLeave);
 
     return () => {
+      map.off('click', handleMapClick);
       map.off('click', LINE_LAYER_ID, handleClick);
       map.off('mousemove', LINE_LAYER_ID, handleMouseMove);
       map.off('mouseleave', LINE_LAYER_ID, handleMouseLeave);
